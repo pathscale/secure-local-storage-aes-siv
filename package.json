@@ -48,8 +48,6 @@
 		"lint": "biome check --write",
 		"prepublishOnly": "npm run build && npm run lint",
 		"typecheck": "tsc --noEmit",
-		"preversion": "npm run lint",
-		"version": "npm run build && git add -A dist",
 		"postversion": "git push && git push --tags"
 	},
 	"devDependencies": {
