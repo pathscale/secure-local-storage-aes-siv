@@ -47,8 +47,7 @@
 		"clean": "rimraf dist",
 		"lint": "biome check --write",
 		"prepublishOnly": "npm run build && npm run lint",
-		"typecheck": "tsc --noEmit",
-		"postversion": "git push && git push --tags"
+		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.16",
