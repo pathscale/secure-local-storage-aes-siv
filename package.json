@@ -1,0 +1,66 @@
+{
+	"name": "@pathscale/secure-local-storage-aes-siv",
+	"version": "1.0.0",
+	"description": "A secure localStorage wrapper using AES-SIV",
+	"keywords": [
+		"localstorage",
+		"encryption",
+		"security",
+		"browser-fingerprinting",
+		"typescript",
+		"aes-siv",
+		"aead",
+		"secure-storage",
+		"privacy",
+		"data-protection",
+		"crypto"
+	],
+	"homepage": "https://github.com/pathscale/secure-local-storage-aes-siv#readme",
+	"bugs": {
+		"url": "https://github.com/pathscale/secure-local-storage-aes-siv/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/pathscale/secure-local-storage-aes-siv.git"
+	},
+	"license": "MIT",
+	"author": "Pathscale",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.js"
+		}
+	},
+	"main": "dist/index.js",
+	"module": "dist/index.mjs",
+	"types": "dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "rslib build",
+		"build:watch": "rslib build --watch",
+		"clean": "rimraf dist",
+		"lint": "biome check --write",
+		"prepublishOnly": "npm run build && npm run lint",
+		"typecheck": "tsc --noEmit",
+		"preversion": "npm run lint",
+		"version": "npm run build && git add -A dist",
+		"postversion": "git push && git push --tags"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.16",
+		"@noble/ciphers": "^2.2.0",
+		"@rslib/core": "^0.22.0",
+		"@types/bun": "^1.3.14",
+		"rimraf": "^6.1.3",
+		"typescript": "^6.0.3"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}
