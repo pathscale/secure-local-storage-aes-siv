@@ -1,4 +1,3 @@
-````markdown
 # Secure Local Storage AES-SIV
 
 [![npm](https://img.shields.io/npm/v/@pathscale/secure-local-storage-aes-siv.svg)](https://www.npmjs.com/package/@pathscale/secure-local-storage-aes-siv) [![downloads](https://img.shields.io/npm/dm/@pathscale/secure-local-storage-aes-siv.svg)](http://npm-stat.com/charts.html?package=@pathscale/secure-local-storage-aes-siv) [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -404,4 +403,3 @@ If you have any questions or issues, please:
 ---
 
 Forked from `@jahidulsaeid/secure-local-storage` and ported to AES-256-SIV.
-````
