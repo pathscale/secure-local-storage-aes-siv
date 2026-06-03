@@ -46,7 +46,7 @@
 		"build:watch": "rslib build --watch",
 		"clean": "rimraf dist",
 		"lint": "biome check --write",
-		"prepublishOnly": "npm run build && npm run lint",
+		"prepublishOnly": "bun run build && bun run lint",
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
