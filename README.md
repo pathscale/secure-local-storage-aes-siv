@@ -32,13 +32,7 @@ Secure Local Storage encrypts values before writing them to localStorage. The li
 ## 📦 Installation
 
 ```bash
-npm install @pathscale/secure-local-storage-aes-siv
-```
-
-or
-
-```bash
-yarn add @pathscale/secure-local-storage-aes-siv
+bun install @pathscale/secure-local-storage-aes-siv
 ```
 
 ## 🏃‍♂️ Quick Start
@@ -367,9 +361,9 @@ export default {
 ### Development Setup
 
 1. Clone the repository
-2. Install dependencies: `npm install`
-3. Build the project: `npm run build`
-4. Run linting: `npm run lint`
+2. Install dependencies: `bun install`
+3. Build the project: `bun run build`
+4. Run linting: `bun run lint`
 5. Test locally in a browser with the built files
 
 ## 📄 License
