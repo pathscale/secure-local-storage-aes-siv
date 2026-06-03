@@ -364,18 +364,6 @@ export default {
 </script>
 ```
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-Please read our [Contributing Guide](CONTRIBUTING.md) for detailed information on:
-
-- Setting up the development environment
-- Running tests locally
-- Code style guidelines
-- Submitting pull requests
-- Development workflow
-
 ### Development Setup
 
 1. Clone the repository
