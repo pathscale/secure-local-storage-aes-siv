@@ -1,6 +1,6 @@
 {
 	"name": "@pathscale/secure-local-storage-aes-siv",
-	"version": "1.0.8",
+	"version": "1.1.0",
 	"description": "A secure localStorage wrapper using AES-SIV",
 	"keywords": [
 		"localstorage",

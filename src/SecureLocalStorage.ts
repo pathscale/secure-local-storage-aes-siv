@@ -11,7 +11,6 @@ export class SecureLocalStorage {
 	private environment: EnvironmentManager;
 	private config: SecureStorageConfig;
 	private storageEngine: StorageEngine;
-	private prefix: string;
 	private memoryCache: Map<string, StorageValue>;
 	private isInitialized: boolean = false;
 
@@ -28,7 +27,6 @@ export class SecureLocalStorage {
 		};
 
 		this.storageEngine = this.getStorageEngine();
-		this.prefix = this.config.prefix || 'sls_';
 		this.memoryCache = new Map();
 
 		const secretKey = this.generateSecretKey();
@@ -46,9 +44,8 @@ export class SecureLocalStorage {
 	 * Get the singleton instance
 	 */
 	public static getInstance(config?: Partial<SecureStorageConfig>): SecureLocalStorage {
-		if (!SecureLocalStorage.instance) {
-			SecureLocalStorage.instance = new SecureLocalStorage(config);
-		}
+		if (SecureLocalStorage.instance && config) SecureLocalStorage.instance.updateConfig(config);
+		if (!SecureLocalStorage.instance) SecureLocalStorage.instance = new SecureLocalStorage(config);
 		return SecureLocalStorage.instance;
 	}
 
@@ -151,7 +148,7 @@ export class SecureLocalStorage {
 
 			for (let i = 0; i < this.storageEngine.length; i++) {
 				const key = this.storageEngine.key(i);
-				if (key?.startsWith(this.prefix)) {
+				if (key?.startsWith(this.config.prefix)) {
 					keysToRemove.push(key);
 				}
 			}
@@ -183,9 +180,9 @@ export class SecureLocalStorage {
 
 		for (let i = 0; i < this.storageEngine.length; i++) {
 			const key = this.storageEngine.key(i);
-			if (key?.startsWith(this.prefix)) {
+			if (key?.startsWith(this.config.prefix)) {
 				// Remove prefix to get original key
-				keys.push(key.substring(this.prefix.length));
+				keys.push(key.substring(this.config.prefix.length));
 			}
 		}
 
@@ -218,18 +215,15 @@ export class SecureLocalStorage {
 	}
 
 	private getStorageEngine(): StorageEngine {
-		if (typeof localStorage !== 'undefined') {
-			return localStorage;
-		}
-
-		// Fallback to memory storage for environments without localStorage
+		if (typeof localStorage !== 'undefined') return localStorage;
 		return new MemoryStorage();
 	}
 
 	private getStorageKey(key: string): string {
-		return `${this.prefix}${key}`;
+		return `${this.config.prefix}${key}`;
 	}
 
+	// TODO: NUKE
 	private generateDefaultHashKey(): string {
 		return 'secure-local-storage-default-key';
 	}

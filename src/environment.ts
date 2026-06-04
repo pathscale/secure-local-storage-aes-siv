@@ -13,20 +13,13 @@ export class EnvironmentManager {
 	/**
 	 * Get configuration from environment variables
 	 */
-	public getConfig(): SecureStorageConfig {
-		const hashKey = this.getHashKey();
-		const prefix = this.getPrefix();
-		const disabledKeys = this.getDisabledKeys();
-
-		const config: SecureStorageConfig = {
-			disabledKeys,
+	public getConfig(): Partial<SecureStorageConfig> {
+		return {
+			hashKey: this.getHashKey(),
+			prefix: this.getPrefix(),
+			disabledKeys: this.getDisabledKeys(),
 			debug: false,
 		};
-
-		if (hashKey) config.hashKey = hashKey;
-		if (prefix) config.prefix = prefix;
-
-		return config;
 	}
 
 	private loadEnvironmentVariables(): EnvironmentConfig {

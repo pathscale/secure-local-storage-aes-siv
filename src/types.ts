@@ -3,13 +3,13 @@
  */
 export interface SecureStorageConfig {
 	/** Custom hash key for encryption */
-	hashKey?: string;
+	hashKey: string;
 	/** Prefix for storage keys */
-	prefix?: string;
+	prefix: string;
 	/** Disabled properties for fingerprint generation */
-	disabledKeys?: FingerprintProperty[];
+	disabledKeys: FingerprintProperty[];
 	/** Enable debug mode */
-	debug?: boolean;
+	debug: boolean;
 }
 
 /**

@@ -2,11 +2,14 @@ import { aessiv } from '@noble/ciphers/aes.js';
 import type { EncryptedStorageItem, StorageValue } from './types';
 
 const ALGORITHM = 'AES-256-SIV';
-const KEY_BYTES = new Set([32, 48, 64]);
-const HEX_KEY_PATTERN = /^[0-9a-f]{64}$|^[0-9a-f]{96}$|^[0-9a-f]{128}$/i;
+const KEY_BYTES = 64;
+const HEX_KEY_PATTERN = /^[0-9a-f]{128}$/i;
+// TODO: NUKE
 const DEFAULT_SECRET_KEY = new Uint8Array([
 	0x70, 0x61, 0x74, 0x68, 0x73, 0x63, 0x61, 0x6c, 0x65, 0x2d, 0x73, 0x6c, 0x73, 0x2d, 0x63, 0x68, 0x61, 0x63, 0x68,
-	0x61, 0x32, 0x30, 0x70, 0x6f, 0x6c, 0x79, 0x31, 0x33, 0x30, 0x35, 0x6b, 0x31,
+	0x61, 0x32, 0x30, 0x70, 0x6f, 0x6c, 0x79, 0x31, 0x33, 0x30, 0x35, 0x6b, 0x31, 0x70, 0x61, 0x74, 0x68, 0x73, 0x63,
+	0x61, 0x6c, 0x65, 0x2d, 0x73, 0x6c, 0x73, 0x2d, 0x63, 0x68, 0x61, 0x63, 0x68, 0x61, 0x32, 0x30, 0x70, 0x6f, 0x6c,
+	0x79, 0x31, 0x33, 0x30, 0x35, 0x6b, 0x31,
 ]);
 
 interface AesSivEncryptedEnvelope {
@@ -20,9 +23,13 @@ interface AesSivEncryptedEnvelope {
  */
 export class EncryptionManager {
 	private secretKey: Uint8Array;
-	private readonly version = '3.0.0';
+	private readonly version = '3.1.0';
 	private readonly textEncoder = new TextEncoder();
 	private readonly textDecoder = new TextDecoder();
+	private get AAD(): Uint8Array[] {
+		const data = [ALGORITHM, this.version];
+		return data.map((s) => this.textEncoder.encode(s));
+	}
 
 	constructor(secretKey: string = '') {
 		this.secretKey = this.loadSecretKey(secretKey);
@@ -49,14 +56,14 @@ export class EncryptionManager {
 
 		const serialized = JSON.stringify(item);
 		const plaintext = this.textEncoder.encode(serialized);
-		const cipher = aessiv(this.secretKey);
+		const cipher = aessiv(this.secretKey, ...this.AAD);
 		const ciphertext = cipher.encrypt(plaintext);
-
 		const envelope: AesSivEncryptedEnvelope = {
 			algorithm: ALGORITHM,
 			ciphertext: this.encodeBase64(ciphertext),
 			version: this.version,
 		};
+
 		return JSON.stringify(envelope);
 	}
 
@@ -66,18 +73,12 @@ export class EncryptionManager {
 	public decrypt(encryptedData: string): StorageValue {
 		try {
 			const envelope = JSON.parse(encryptedData);
-			if (!this.isAesSivEnvelope(envelope)) {
-				throw new Error('Unsupported encrypted data format');
-			}
-
+			if (!this.isAesSivEnvelope(envelope)) throw new Error('Unsupported encrypted data format');
 			const ciphertext = this.decodeBase64(envelope.ciphertext);
-			const cipher = aessiv(this.secretKey);
+			const cipher = aessiv(this.secretKey, ...this.AAD);
 			const plaintext = cipher.decrypt(ciphertext);
-			if (!plaintext) {
-				throw new Error('Failed to authenticate encrypted data');
-			}
+			if (!plaintext) throw new Error('Failed to authenticate encrypted data');
 			const decryptedText = this.textDecoder.decode(plaintext);
-
 			const item: EncryptedStorageItem = JSON.parse(decryptedText);
 			return this.deserializeData(item.data, item.type);
 		} catch (error) {
@@ -93,8 +94,7 @@ export class EncryptionManager {
 		try {
 			const envelope = JSON.parse(encryptedData);
 			if (!this.isAesSivEnvelope(envelope)) return false;
-
-			const cipher = aessiv(this.secretKey);
+			const cipher = aessiv(this.secretKey, ...this.AAD);
 			const plaintext = cipher.decrypt(this.decodeBase64(envelope.ciphertext));
 			if (!plaintext) return false;
 			const item = JSON.parse(this.textDecoder.decode(plaintext));
@@ -105,6 +105,7 @@ export class EncryptionManager {
 	}
 
 	private loadSecretKey(key: string): Uint8Array {
+		// TODO: NUKE default key
 		return this.tryParseRawKey(key) || DEFAULT_SECRET_KEY.slice();
 	}
 
@@ -120,25 +121,19 @@ export class EncryptionManager {
 
 		try {
 			const decoded = this.decodeBase64(key);
-			if (KEY_BYTES.has(decoded.length)) return decoded;
+			if (KEY_BYTES === decoded.length) return decoded;
 		} catch {
 			// Not a base64 key; try raw UTF-8 below.
 		}
 
 		const raw = this.textEncoder.encode(key);
-		if (KEY_BYTES.has(raw.length)) return raw;
+		if (KEY_BYTES === raw.length) return raw;
 		return null;
 	}
 
 	private serializeData(data: StorageValue): string {
-		if (data === null || data === undefined) {
-			return '';
-		}
-
-		if (typeof data === 'object') {
-			return JSON.stringify(data);
-		}
-
+		if (data === null || data === undefined) return '';
+		if (typeof data === 'object') return JSON.stringify(data);
 		return String(data);
 	}
 
