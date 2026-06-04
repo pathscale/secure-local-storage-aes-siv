@@ -30,9 +30,9 @@ export class EnvironmentManager {
 	}
 
 	private loadEnvironmentVariables(): EnvironmentConfig {
-		if (process?.env) return process.env as EnvironmentConfig;
+		if (globalThis.process?.env) return globalThis.process.env as EnvironmentConfig;
 		if (import.meta.env) return import.meta.env as EnvironmentConfig;
-		if (window?.__ENV__) return window.__ENV__ as EnvironmentConfig;
+		if (globalThis.window?.__ENV__) return globalThis.window.__ENV__ as EnvironmentConfig;
 		return {};
 	}
 
