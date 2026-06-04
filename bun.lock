@@ -4,9 +4,11 @@
   "workspaces": {
     "": {
       "name": "@pathscale/secure-local-storage-aes-siv",
+      "dependencies": {
+        "@noble/ciphers": "^2.2.0",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.4.16",
-        "@noble/ciphers": "^2.2.0",
         "@rslib/core": "^0.22.0",
         "@types/bun": "^1.3.14",
         "rimraf": "^6.1.3",
