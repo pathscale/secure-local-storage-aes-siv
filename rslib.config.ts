@@ -2,7 +2,10 @@ import { defineConfig } from '@rslib/core';
 
 export default defineConfig({
 	output: { target: 'web' },
-	source: { entry: { index: ['./src/**/*.ts'] } },
+	source: {
+		entry: { index: ['./src/**/*.ts'] },
+		define: { 'import.meta.env': 'import.meta.env' },
+	},
 	lib: [
 		{
 			bundle: false,
