@@ -18,10 +18,4 @@ declare global {
 	}
 }
 
-// Extend Navigator interface for legacy browser properties
-interface ExtendedNavigator extends Navigator {
-	systemLanguage?: string;
-	browserLanguage?: string;
-}
-
 export {};

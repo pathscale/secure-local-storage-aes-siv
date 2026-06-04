@@ -2,8 +2,8 @@ import { aessiv } from '@noble/ciphers/aes.js';
 import type { EncryptedStorageItem, StorageValue } from './types';
 
 const ALGORITHM = 'AES-256-SIV';
-const KEY_BYTES = 32;
-const HEX_KEY_PATTERN = /^[0-9a-f]{64}$/i;
+const KEY_BYTES = new Set([32, 48, 64]);
+const HEX_KEY_PATTERN = /^[0-9a-f]{64}$|^[0-9a-f]{96}$|^[0-9a-f]{128}$/i;
 const DEFAULT_SECRET_KEY = new Uint8Array([
 	0x70, 0x61, 0x74, 0x68, 0x73, 0x63, 0x61, 0x6c, 0x65, 0x2d, 0x73, 0x6c, 0x73, 0x2d, 0x63, 0x68, 0x61, 0x63, 0x68,
 	0x61, 0x32, 0x30, 0x70, 0x6f, 0x6c, 0x79, 0x31, 0x33, 0x30, 0x35, 0x6b, 0x31,
@@ -14,14 +14,6 @@ interface AesSivEncryptedEnvelope {
 	ciphertext: string;
 	version: string;
 }
-
-type BufferLike = Uint8Array & {
-	toString(encoding?: string): string;
-};
-
-type BufferConstructorLike = {
-	from(input: string | Uint8Array, encoding?: string): BufferLike;
-};
 
 /**
  * Encryption utility for secure data storage
@@ -120,22 +112,22 @@ export class EncryptionManager {
 		if (!key) return null;
 
 		if (HEX_KEY_PATTERN.test(key)) {
-			const bytes = new Uint8Array(KEY_BYTES);
-			for (let index = 0; index < KEY_BYTES; index += 1) {
-				bytes[index] = Number.parseInt(key.slice(index * 2, index * 2 + 2), 16);
-			}
+			const len = key.length / 2;
+			const bytes = new Uint8Array(len);
+			for (let i = 0; i < len; i += 1) bytes[i] = Number.parseInt(key.slice(i * 2, i * 2 + 2), 16);
 			return bytes;
 		}
 
 		try {
 			const decoded = this.decodeBase64(key);
-			if (decoded.length === KEY_BYTES) return decoded;
+			if (KEY_BYTES.has(decoded.length)) return decoded;
 		} catch {
 			// Not a base64 key; try raw UTF-8 below.
 		}
 
 		const raw = this.textEncoder.encode(key);
-		return raw.length === KEY_BYTES ? raw : null;
+		if (KEY_BYTES.has(raw.length)) return raw;
+		return null;
 	}
 
 	private serializeData(data: StorageValue): string {
@@ -193,15 +185,12 @@ export class EncryptionManager {
 		if (typeof btoa === 'function') {
 			let binary = '';
 			const chunkSize = 0x8000;
-			for (let index = 0; index < bytes.length; index += chunkSize) {
-				binary += String.fromCharCode(...Array.from(bytes.subarray(index, index + chunkSize)));
+			for (let i = 0; i < bytes.length; i += chunkSize) {
+				binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunkSize)));
 			}
 			return btoa(binary);
 		}
-
-		const buffer = this.getGlobalBuffer();
-		if (buffer) return buffer.from(bytes).toString('base64');
-
+		if (globalThis.Buffer) return globalThis.Buffer.from(bytes).toString('base64');
 		throw new Error('No base64 encoder available');
 	}
 
@@ -209,19 +198,10 @@ export class EncryptionManager {
 		if (typeof atob === 'function') {
 			const binary = atob(value);
 			const bytes = new Uint8Array(binary.length);
-			for (let index = 0; index < binary.length; index += 1) {
-				bytes[index] = binary.charCodeAt(index);
-			}
+			for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
 			return bytes;
 		}
-
-		const buffer = this.getGlobalBuffer();
-		if (buffer) return Uint8Array.from(buffer.from(value, 'base64'));
-
+		if (globalThis.Buffer) return Uint8Array.from(globalThis.Buffer.from(value, 'base64'));
 		throw new Error('No base64 decoder available');
-	}
-
-	private getGlobalBuffer(): BufferConstructorLike | undefined {
-		return (globalThis as typeof globalThis & { Buffer?: BufferConstructorLike }).Buffer;
 	}
 }
