@@ -1,6 +1,6 @@
 {
 	"name": "@pathscale/secure-local-storage-aes-siv",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "A secure localStorage wrapper using AES-SIV",
 	"keywords": [
 		"localstorage",
@@ -29,13 +29,12 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs",
-			"require": "./dist/index.js"
+			"import": "./dist/index.js"
 		}
 	},
-	"main": "dist/index.js",
-	"module": "dist/index.mjs",
-	"types": "dist/index.d.ts",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
 		"README.md",
