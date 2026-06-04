@@ -21,7 +21,7 @@ export class SecureLocalStorage {
 
 		// Merge environment config with provided config
 		this.config = {
-			encryptionKey: config.encryptionKey,
+			hashKey: config.hashKey || envConfig.hashKey || this.generateDefaultHashKey(),
 			prefix: config.prefix || envConfig.prefix || 'sls_',
 			disabledKeys: config.disabledKeys || envConfig.disabledKeys || [],
 			debug: config.debug || envConfig.debug || false,
@@ -31,39 +31,15 @@ export class SecureLocalStorage {
 		this.prefix = this.config.prefix || 'sls_';
 		this.memoryCache = new Map();
 
-		// Unkeyed unless a valid 64-byte key was supplied. No weak default key.
-		this.encryption = new EncryptionManager(this.config.encryptionKey);
+		const secretKey = this.generateSecretKey();
+		this.encryption = new EncryptionManager(secretKey);
 
 		this.isInitialized = true;
-		if (this.encryption.hasKey()) {
-			this.initializeFromStorage();
-		}
+		this.initializeFromStorage();
 
 		if (this.config.debug) {
-			console.log('SecureLocalStorage initialized (keyed:', this.encryption.hasKey(), ')');
+			console.log('SecureLocalStorage initialized with config:', this.config);
 		}
-	}
-
-	/**
-	 * Provide or replace the in-memory AES-SIV key (base64 string or 64-byte
-	 * Uint8Array). Clears the plaintext cache so subsequent reads decrypt under
-	 * the new key. Throws InvalidEncryptionKeyError if the key is not 64 bytes.
-	 */
-	public setEncryptionKey(key: string | Uint8Array): void {
-		this.encryption.updateSecretKey(key);
-		this.memoryCache.clear();
-		this.initializeFromStorage();
-	}
-
-	/** Drop the in-memory key (e.g. on logout) and clear the plaintext cache. */
-	public clearEncryptionKey(): void {
-		this.encryption.updateSecretKey(null);
-		this.memoryCache.clear();
-	}
-
-	/** Whether a usable encryption key is currently loaded. */
-	public hasEncryptionKey(): boolean {
-		return this.encryption.hasKey();
 	}
 
 	/**
@@ -227,17 +203,17 @@ export class SecureLocalStorage {
 	 * Update configuration
 	 */
 	public updateConfig(newConfig: Partial<SecureStorageConfig>): void {
-		const keyChanged = 'encryptionKey' in newConfig && newConfig.encryptionKey !== this.config.encryptionKey;
+		const oldConfig = { ...this.config };
 		this.config = { ...this.config, ...newConfig };
 
-		if (keyChanged) {
-			this.encryption.updateSecretKey(this.config.encryptionKey ?? null);
-			this.memoryCache.clear();
-			if (this.encryption.hasKey()) this.initializeFromStorage();
+		// Regenerate secret key if hash key changed
+		if (oldConfig.hashKey !== this.config.hashKey) {
+			const newSecretKey = this.generateSecretKey();
+			this.encryption.updateSecretKey(newSecretKey);
 		}
 
 		if (this.config.debug) {
-			console.log('Configuration updated (keyed:', this.encryption.hasKey(), ')');
+			console.log('Configuration updated:', this.config);
 		}
 	}
 
@@ -252,6 +228,14 @@ export class SecureLocalStorage {
 
 	private getStorageKey(key: string): string {
 		return `${this.prefix}${key}`;
+	}
+
+	private generateDefaultHashKey(): string {
+		return 'secure-local-storage-default-key';
+	}
+
+	private generateSecretKey(): string {
+		return this.config.hashKey || this.generateDefaultHashKey();
 	}
 
 	private initializeFromStorage(): void {
