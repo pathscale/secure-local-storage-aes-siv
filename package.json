@@ -46,6 +46,7 @@
 		"clean": "rimraf dist",
 		"lint": "biome check --write",
 		"prepublishOnly": "bun run clean && bun run lint && bun run build",
+		"test": "bun test",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

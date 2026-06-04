@@ -1,152 +1,191 @@
 import { aessiv } from '@noble/ciphers/aes.js';
+import { base64ToBytes, bytesToBase64, bytesToString, stringToBytes } from './encoding';
 import type { EncryptedStorageItem, StorageValue } from './types';
 
-const ALGORITHM = 'AES-256-SIV';
-const KEY_BYTES = new Set([32, 48, 64]);
-const HEX_KEY_PATTERN = /^[0-9a-f]{64}$|^[0-9a-f]{96}$|^[0-9a-f]{128}$/i;
-const DEFAULT_SECRET_KEY = new Uint8Array([
-	0x70, 0x61, 0x74, 0x68, 0x73, 0x63, 0x61, 0x6c, 0x65, 0x2d, 0x73, 0x6c, 0x73, 0x2d, 0x63, 0x68, 0x61, 0x63, 0x68,
-	0x61, 0x32, 0x30, 0x70, 0x6f, 0x6c, 0x79, 0x31, 0x33, 0x30, 0x35, 0x6b, 0x31,
-]);
+/**
+ * AES-SIV (RFC 5297) authenticated encryption layer.
+ *
+ * Contract:
+ *   - key MUST be exactly 64 raw bytes (AES-256-SIV / 512 bits), supplied as a
+ *     base64 string (as returned by Honey auth) or a raw Uint8Array.
+ *   - AES-SIV is nonce-misuse-resistant: the synthetic IV is derived from the
+ *     plaintext + AAD, so NO nonce is generated, stored, or required by the FE.
+ *   - the envelope's {alg, version} are bound as associated data, so a tampered
+ *     alg/version causes authentication failure on decrypt.
+ *   - never logs key material or plaintext.
+ */
+
+const ALGORITHM = 'AES-SIV' as const;
+const ENVELOPE_VERSION = 1 as const;
+export const KEY_BYTES = 64;
+
+export class InvalidEncryptionKeyError extends Error {
+	constructor(message = `Encryption key must be exactly ${KEY_BYTES} raw bytes`) {
+		super(message);
+		this.name = 'InvalidEncryptionKeyError';
+	}
+}
+
+export class MissingEncryptionKeyError extends Error {
+	constructor(message = 'No encryption key set on EncryptionManager') {
+		super(message);
+		this.name = 'MissingEncryptionKeyError';
+	}
+}
+
+export class DecryptionError extends Error {
+	constructor(message = 'Failed to decrypt or authenticate data') {
+		super(message);
+		this.name = 'DecryptionError';
+	}
+}
 
 interface AesSivEncryptedEnvelope {
-	algorithm: typeof ALGORITHM;
-	ciphertext: string;
-	version: string;
+	alg: typeof ALGORITHM;
+	v: typeof ENVELOPE_VERSION;
+	ct: string;
 }
 
 /**
- * Encryption utility for secure data storage
+ * Normalizes a key input to exactly 64 raw bytes or throws.
+ * Accepts a base64 string (Honey auth contract) or a raw Uint8Array.
  */
+const normalizeKey = (key: string | Uint8Array): Uint8Array => {
+	let bytes: Uint8Array;
+	if (key instanceof Uint8Array) {
+		bytes = key;
+	} else if (typeof key === 'string') {
+		try {
+			bytes = base64ToBytes(key);
+		} catch {
+			throw new InvalidEncryptionKeyError('Encryption key is not valid base64');
+		}
+	} else {
+		throw new InvalidEncryptionKeyError();
+	}
+
+	if (bytes.length !== KEY_BYTES) {
+		throw new InvalidEncryptionKeyError();
+	}
+	return bytes.slice();
+};
+
 export class EncryptionManager {
-	private secretKey: Uint8Array;
-	private readonly version = '3.0.0';
-	private readonly textEncoder = new TextEncoder();
-	private readonly textDecoder = new TextDecoder();
+	private secretKey: Uint8Array | null = null;
 
-	constructor(secretKey: string = '') {
-		this.secretKey = this.loadSecretKey(secretKey);
+	/**
+	 * @param secretKey optional base64 string or 64-byte Uint8Array. When omitted,
+	 *   the manager is unkeyed and encrypt/decrypt throw MissingEncryptionKeyError
+	 *   until a valid key is provided via {@link updateSecretKey}.
+	 */
+	constructor(secretKey?: string | Uint8Array) {
+		if (secretKey !== undefined && secretKey !== '') {
+			this.secretKey = normalizeKey(secretKey);
+		}
+	}
+
+	/** Whether a valid 64-byte key is currently loaded. */
+	public hasKey(): boolean {
+		return this.secretKey !== null;
 	}
 
 	/**
-	 * Update the secret key
+	 * Replace the secret key. Pass null/undefined/'' to clear (zeroizes the
+	 * previous key). A non-empty value must resolve to exactly 64 bytes or throws.
 	 */
-	public updateSecretKey(newSecretKey: string): void {
-		this.secretKey.fill(0);
-		this.secretKey = this.loadSecretKey(newSecretKey);
+	public updateSecretKey(newSecretKey?: string | Uint8Array | null): void {
+		const next =
+			newSecretKey === undefined || newSecretKey === null || newSecretKey === '' ? null : normalizeKey(newSecretKey);
+		if (this.secretKey) this.secretKey.fill(0);
+		this.secretKey = next;
 	}
 
-	/**
-	 * Encrypt data with type preservation
-	 */
+	/** Encrypt a storage value into a JSON envelope string. */
 	public encrypt(data: StorageValue): string {
+		const key = this.requireKey();
+
 		const item: EncryptedStorageItem = {
 			data: this.serializeData(data),
 			type: this.getDataType(data),
 			timestamp: Date.now(),
-			version: this.version,
+			version: String(ENVELOPE_VERSION),
 		};
 
-		const serialized = JSON.stringify(item);
-		const plaintext = this.textEncoder.encode(serialized);
-		const cipher = aessiv(this.secretKey);
-		const ciphertext = cipher.encrypt(plaintext);
+		const plaintext = stringToBytes(JSON.stringify(item));
+		const ciphertext = aessiv(key, this.associatedData()).encrypt(plaintext);
 
 		const envelope: AesSivEncryptedEnvelope = {
-			algorithm: ALGORITHM,
-			ciphertext: this.encodeBase64(ciphertext),
-			version: this.version,
+			alg: ALGORITHM,
+			v: ENVELOPE_VERSION,
+			ct: bytesToBase64(ciphertext),
 		};
 		return JSON.stringify(envelope);
 	}
 
 	/**
-	 * Decrypt data with type restoration
+	 * Decrypt a JSON envelope string back to its StorageValue.
+	 * @throws {DecryptionError} on malformed envelope, wrong key, tampered
+	 *   ciphertext, or alg/version mismatch.
 	 */
 	public decrypt(encryptedData: string): StorageValue {
+		const key = this.requireKey();
+
+		let envelope: unknown;
 		try {
-			const envelope = JSON.parse(encryptedData);
-			if (!this.isAesSivEnvelope(envelope)) {
-				throw new Error('Unsupported encrypted data format');
-			}
-
-			const ciphertext = this.decodeBase64(envelope.ciphertext);
-			const cipher = aessiv(this.secretKey);
-			const plaintext = cipher.decrypt(ciphertext);
-			if (!plaintext) {
-				throw new Error('Failed to authenticate encrypted data');
-			}
-			const decryptedText = this.textDecoder.decode(plaintext);
-
-			const item: EncryptedStorageItem = JSON.parse(decryptedText);
-			return this.deserializeData(item.data, item.type);
-		} catch (error) {
-			console.warn('Failed to decrypt data:', error);
-			return null;
+			envelope = JSON.parse(encryptedData);
+		} catch {
+			throw new DecryptionError('Encrypted data is not valid JSON');
 		}
+
+		if (!this.isAesSivEnvelope(envelope)) {
+			throw new DecryptionError('Unsupported or mismatched encrypted data format');
+		}
+
+		let plaintext: Uint8Array;
+		try {
+			const ciphertext = base64ToBytes(envelope.ct);
+			plaintext = aessiv(key, this.associatedData()).decrypt(ciphertext);
+		} catch {
+			throw new DecryptionError();
+		}
+
+		let item: EncryptedStorageItem;
+		try {
+			item = JSON.parse(bytesToString(plaintext));
+		} catch {
+			throw new DecryptionError('Decrypted payload is not valid JSON');
+		}
+		return this.deserializeData(item.data, item.type);
 	}
 
-	/**
-	 * Validate if data was encrypted with this library
-	 */
+	/** True if the data is a well-formed envelope that decrypts under this key. */
 	public isValidEncryptedData(encryptedData: string): boolean {
 		try {
-			const envelope = JSON.parse(encryptedData);
-			if (!this.isAesSivEnvelope(envelope)) return false;
-
-			const cipher = aessiv(this.secretKey);
-			const plaintext = cipher.decrypt(this.decodeBase64(envelope.ciphertext));
-			if (!plaintext) return false;
-			const item = JSON.parse(this.textDecoder.decode(plaintext));
-			return item && typeof item.data !== 'undefined' && typeof item.type === 'string';
+			this.decrypt(encryptedData);
+			return true;
 		} catch {
 			return false;
 		}
 	}
 
-	private loadSecretKey(key: string): Uint8Array {
-		return this.tryParseRawKey(key) || DEFAULT_SECRET_KEY.slice();
+	private requireKey(): Uint8Array {
+		if (!this.secretKey) throw new MissingEncryptionKeyError();
+		return this.secretKey;
 	}
 
-	private tryParseRawKey(key: string): Uint8Array | null {
-		if (!key) return null;
-
-		if (HEX_KEY_PATTERN.test(key)) {
-			const len = key.length / 2;
-			const bytes = new Uint8Array(len);
-			for (let i = 0; i < len; i += 1) bytes[i] = Number.parseInt(key.slice(i * 2, i * 2 + 2), 16);
-			return bytes;
-		}
-
-		try {
-			const decoded = this.decodeBase64(key);
-			if (KEY_BYTES.has(decoded.length)) return decoded;
-		} catch {
-			// Not a base64 key; try raw UTF-8 below.
-		}
-
-		const raw = this.textEncoder.encode(key);
-		if (KEY_BYTES.has(raw.length)) return raw;
-		return null;
+	/** Authenticated metadata binding - protects against alg/version swaps. */
+	private associatedData(): Uint8Array {
+		return stringToBytes(`${ALGORITHM}:${ENVELOPE_VERSION}`);
 	}
 
 	private serializeData(data: StorageValue): string {
-		if (data === null || data === undefined) {
-			return '';
-		}
-
-		if (typeof data === 'object') {
-			return JSON.stringify(data);
-		}
-
+		if (data === null || data === undefined) return '';
+		if (typeof data === 'object') return JSON.stringify(data);
 		return String(data);
 	}
 
 	private deserializeData(serializedData: string, type: string): StorageValue {
-		if (type === 'null' || serializedData === '') {
-			return null;
-		}
-
+		if (type === 'null') return null;
 		switch (type) {
 			case 'string':
 				return serializedData;
@@ -174,34 +213,6 @@ export class EncryptionManager {
 	private isAesSivEnvelope(value: unknown): value is AesSivEncryptedEnvelope {
 		if (!value || typeof value !== 'object') return false;
 		const envelope = value as Partial<Record<keyof AesSivEncryptedEnvelope, unknown>>;
-		return (
-			envelope.algorithm === ALGORITHM &&
-			typeof envelope.ciphertext === 'string' &&
-			typeof envelope.version === 'string'
-		);
-	}
-
-	private encodeBase64(bytes: Uint8Array): string {
-		if (typeof btoa === 'function') {
-			let binary = '';
-			const chunkSize = 0x8000;
-			for (let i = 0; i < bytes.length; i += chunkSize) {
-				binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunkSize)));
-			}
-			return btoa(binary);
-		}
-		if (globalThis.Buffer) return globalThis.Buffer.from(bytes).toString('base64');
-		throw new Error('No base64 encoder available');
-	}
-
-	private decodeBase64(value: string): Uint8Array {
-		if (typeof atob === 'function') {
-			const binary = atob(value);
-			const bytes = new Uint8Array(binary.length);
-			for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-			return bytes;
-		}
-		if (globalThis.Buffer) return Uint8Array.from(globalThis.Buffer.from(value, 'base64'));
-		throw new Error('No base64 decoder available');
+		return envelope.alg === ALGORITHM && envelope.v === ENVELOPE_VERSION && typeof envelope.ct === 'string';
 	}
 }
