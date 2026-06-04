@@ -1,6 +1,6 @@
 {
 	"name": "@pathscale/secure-local-storage-aes-siv",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "A secure localStorage wrapper using AES-SIV",
 	"keywords": [
 		"localstorage",
@@ -45,7 +45,7 @@
 		"build:watch": "rslib build --watch",
 		"clean": "rimraf dist",
 		"lint": "biome check --write",
-		"prepublishOnly": "bun run build && bun run lint",
+		"prepublishOnly": "bun run clean && bun run lint && bun run build",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

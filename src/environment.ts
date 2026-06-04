@@ -30,24 +30,9 @@ export class EnvironmentManager {
 	}
 
 	private loadEnvironmentVariables(): EnvironmentConfig {
-		// Handle different environments with proper typing
-		const globalProcess = (globalThis as { process?: { env?: Record<string, string> } }).process;
-		if (globalProcess?.env) {
-			return globalProcess.env as EnvironmentConfig;
-		}
-
-		// Handle Vite environment
-		const importMeta = import.meta as { env?: Record<string, string> };
-		if (typeof import.meta !== 'undefined' && importMeta.env) {
-			return importMeta.env as EnvironmentConfig;
-		}
-
-		// Handle browser environment with injected variables
-		const globalWindow = window as { __ENV__?: Record<string, string> };
-		if (typeof window !== 'undefined' && globalWindow.__ENV__) {
-			return globalWindow.__ENV__ as EnvironmentConfig;
-		}
-
+		if (process?.env) return process.env as EnvironmentConfig;
+		if (import.meta.env) return import.meta.env as EnvironmentConfig;
+		if (window?.__ENV__) return window.__ENV__ as EnvironmentConfig;
 		return {};
 	}
 
